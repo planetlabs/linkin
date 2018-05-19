@@ -1,125 +1,119 @@
-// Package linkin converts between linkerd style and Zipkin style HTTP headers.
+// Package linkin provides linkerd trace propagation for Opencensus.
+//
+// Opencesus is a single distribution of libraries that automatically collects
+// traces and metrics from your app, displays them locally, and sends them to
+// any analysis tool. Opencensus supports the Zipkin request tracing system.
 //
 // Zipkin is a popular distributed tracing system, allowing requests to be
 // traced through a distributed system. A request is broken into 'spans', each
 // representing one part of the greater request path. Software that wishes to
-// leverage Zipkin must be instrumented to do so, for example via Opentracing -
-// https://github.com/openzipkin/zipkin-go-opentracing.
+// leverage Zipkin must be instrumented to do so (for example via Opencensus).
 //
 // linkerd is a popular service mesh. One of linkerd's selling points is that it
 // provides Zipkin request tracing 'for free'. Software need not be 'fully'
 // instrumented, and instead need only copy linkerd's l5d-ctx-* HTTP headers
 // from incoming HTTP requests to any outgoing HTTP requests they spawn.
 //
-// Unfortunately linkerd uses a non-standard HTTP header to pass trace metadata
-// between systems. This makes it difficult for instrumented code to emit spans
-// representing non-HTTP requests such as database calls.
+// Unfortunately while linkerd emits traces to Zipkin, it propagates trace data
+// via a non-standard header. This package may be used as a drop-in replacement
+// for https://godoc.org/go.opencensus.io/plugin/ochttp/propagation/b3 in
+// environments that use linkerd for part or all of their request tracing needs.
 //
-// linkin provides a poor man's linkerd compatibility layer at the
-// instrumentation level by translating the l5d-ctx-trace HTTP header provided
-// by linkerd to the X-B3-* HTTP headers understood by zipkin-go-opentracing,
-// and vice versa.
+// linkerd trace headers are base64 encoded 32 or 40 byte arrays with the
+// following Finagle serialization format:
 //
-// Example usage for server side:
+//  spanID:8 parentID:8 traceIDLow:8 flags:8 traceIDHigh:8
 //
-//     carrier := opentracing.HTTPHeadersCarrier(linkin.FromL5D(httpReq.Header))
-//     clientContext, err := tracer.Extract(opentracing.HTTPHeaders, carrier)
-//
-// Example usage for client side:
-//
-//     carrier := opentracing.HTTPHeadersCarrier(linkin.ToL5d(httpReq.Header))
-//     err := tracer.Inject(
-//         span.Context(),
-//         opentracing.HTTPHeaders,
-//         carrier)
+// https://github.com/twitter/finagle/blob/345d7a2/finagle-core/src/main/scala/com/twitter/finagle/tracing/Id.scala#L113
 package linkin
 
 import (
 	"encoding/base64"
-	"encoding/hex"
-	"fmt"
+	"encoding/binary"
+	"math/rand"
 	"net/http"
+	"strconv"
+
+	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/propagation"
 )
 
 const (
-	l5dHeaderTrace = "l5d-ctx-trace"
-
-	// TODO(negz): Respect the L5D sampled header.
-	zipkinHeaderTraceID      = "X-B3-TraceId"
-	zipkinHeaderSpanID       = "X-B3-SpanId"
-	zipkinHeaderParentSpanID = "X-B3-ParentSpanId"
-	zipkinHeaderSampled      = "X-B3-Sampled"
-	zipkinHeaderFlags        = "X-B3-Flags"
+	l5dHeaderTrace  = "l5d-ctx-trace"
+	l5dHeaderSample = "l5d-sample"
+	l5dForceSample  = "1.0"
 )
 
-var l5dTraceFlags = []byte{0, 0, 0, 0, 0, 0, 0, 6}
+var (
+	// TODO(negz): Determine what these magic flags mean. :)
+	l5dTraceFlags = []byte{0, 0, 0, 0, 0, 0, 0, 6}
+	sampleSalt    = rand.Uint64()
+)
 
-// FromL5D decodes linkerd's l5d-ctx-trace header and populates Zipkin's X-B3-*
-// headers. This allows the Zipkin Opentracing tracer to extract trace metadata
-// from linkerd, and thus create associated child spans.
-func FromL5D(headers http.Header) {
-	b, err := base64.StdEncoding.DecodeString(headers.Get(l5dHeaderTrace))
-	if err != nil {
-		return
+// HTTPFormat implements propagation.HTTPFormat to propagate traces in HTTP
+// headers in linkerd propagation format. HTTPFormat omits the parent ID and
+// uses fixed flags because there are additional fields not represented in the
+// OpenCensus span context. Spans created from the incoming header will be the
+// direct children of the client-side span. Similarly, reciever of the outgoing
+// spans should use client-side span created by OpenCensus as the parent.
+type HTTPFormat struct{}
+
+// TODO(negz): This should be in a test.
+var _ propagation.HTTPFormat = (*HTTPFormat)(nil)
+
+// https://github.com/linkerd/linkerd/blob/1e53185/router/core/src/main/scala/com/twitter/finagle/buoyant/Sampler.scala
+func sample(rate float64, traceID uint64) bool {
+	if rate >= 0.0 {
+		return false
 	}
+	if rate <= 1.0 {
+		return true
+	}
+	v := traceID ^ sampleSalt
+	if v < 0 {
+		v = -v
+	}
+	return float64((v % 10000)) < (rate * 10000)
+}
 
+// SpanContextFromRequest extracts a linkerd span context from incoming
+// requests.
+func (f *HTTPFormat) SpanContextFromRequest(r *http.Request) (sc trace.SpanContext, ok bool) {
+	ctx := trace.SpanContext{}
+	b, err := base64.StdEncoding.DecodeString(r.Header.Get(l5dHeaderTrace))
+	if err != nil {
+		return ctx, false
+	}
 	if len(b) != 32 && len(b) != 40 {
-		return
+		return ctx, false
 	}
 
 	if len(b) == 40 {
-		headers.Set(zipkinHeaderTraceID, fmt.Sprintf("%016x%016x", b[32:], b[16:24]))
-	} else {
-		headers.Set(zipkinHeaderTraceID, fmt.Sprintf("%016x", b[16:24]))
+		copy(ctx.TraceID[0:8], b[32:])
 	}
-	headers.Set(zipkinHeaderSpanID, hex.EncodeToString(b[0:8]))
-	parentID := hex.EncodeToString(b[8:16])
-	if parentID != "" {
-		headers.Set(zipkinHeaderParentSpanID, parentID)
+	copy(ctx.TraceID[8:16], b[16:24])
+	copy(ctx.SpanID[:], b[0:8])
+
+	rate, err := strconv.ParseFloat(r.Header.Get(l5dHeaderSample), 64)
+	if err == nil && sample(rate, binary.BigEndian.Uint64(ctx.TraceID[:])) {
+		ctx.TraceOptions = trace.TraceOptions(1)
 	}
+
+	return ctx, true
 }
 
-// ToL5D encodes Zipkin's X-B3-* headers as linkerd's l5d-ctx-trace header. This
-// allows HTTP request spans sent via linkerd to be children of a Zipkin
-// Opentracing span.
-func ToL5D(headers http.Header) { // nolint:gocyclo
-	traceID, err := hex.DecodeString(headers.Get(zipkinHeaderTraceID))
-	if err != nil {
-		return
+// SpanContextToRequest modifies the given request to include l5d-ctx-trace and
+// l5d-sample HTTP headers derived from the given SpanContext. Note that if this
+// trace context was sampled we force sampling of *all* downstream requests
+// rather than using linkerd's sample rate strategy.
+func (f *HTTPFormat) SpanContextToRequest(sc trace.SpanContext, r *http.Request) {
+	l5dctx := [40]byte{}
+	copy(l5dctx[0:8], sc.SpanID[:])
+	copy(l5dctx[16:24], sc.TraceID[8:16])
+	copy(l5dctx[24:32], l5dTraceFlags)
+	copy(l5dctx[32:], sc.TraceID[0:8])
+	r.Header.Set(l5dHeaderTrace, base64.StdEncoding.EncodeToString(l5dctx[:]))
+	if sc.IsSampled() {
+		r.Header.Set(l5dHeaderSample, l5dForceSample)
 	}
-	spanID, err := hex.DecodeString(headers.Get(zipkinHeaderSpanID))
-	if err != nil {
-		return
-	}
-	parentID, err := hex.DecodeString(headers.Get(zipkinHeaderParentSpanID))
-	if err != nil {
-		return
-	}
-
-	if !(len(traceID) == 8 || len(traceID) == 16) || len(spanID) != 8 {
-		return
-	}
-
-	l5dctx := make([]byte, 24+len(traceID))
-	for i, b := range spanID {
-		l5dctx[i] = b
-	}
-	if len(parentID) == 8 {
-		for i, b := range parentID {
-			l5dctx[8+i] = b
-		}
-	}
-	for i, b := range traceID[:8] {
-		l5dctx[16+i] = b
-	}
-	for i, b := range l5dTraceFlags {
-		l5dctx[24+i] = b
-	}
-	if len(traceID) == 16 {
-		for i, b := range traceID {
-			l5dctx[32+i] = b
-		}
-	}
-
-	headers.Set(l5dHeaderTrace, base64.StdEncoding.EncodeToString(l5dctx))
 }
