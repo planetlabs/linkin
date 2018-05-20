@@ -1,6 +1,6 @@
 // Package linkin provides linkerd trace propagation for Opencensus.
 //
-// Opencesus is a single distribution of libraries that automatically collects
+// Opencensus is a single distribution of libraries that automatically collects
 // traces and metrics from your app, displays them locally, and sends them to
 // any analysis tool. Opencensus supports the Zipkin request tracing system.
 //
@@ -19,101 +19,80 @@
 // for https://godoc.org/go.opencensus.io/plugin/ochttp/propagation/b3 in
 // environments that use linkerd for part or all of their request tracing needs.
 //
-// linkerd trace headers are base64 encoded 32 or 40 byte arrays with the
-// following Finagle serialization format:
+// linkerd trace headers are base64 encoded 32 or 40 byte arrays (depending on
+// whether the trace ID is 64 or 128bit) with the following Finagle
+// serialization format:
 //
 //  spanID:8 parentID:8 traceIDLow:8 flags:8 traceIDHigh:8
 //
 // https://github.com/twitter/finagle/blob/345d7a2/finagle-core/src/main/scala/com/twitter/finagle/tracing/Id.scala#L113
+// https://github.com/twitter/finagle/blob/345d7a2/finagle-core/src/main/scala/com/twitter/finagle/tracing/Flags.scala
 package linkin
 
 import (
 	"encoding/base64"
-	"encoding/binary"
-	"math/rand"
 	"net/http"
-	"strconv"
 
 	"go.opencensus.io/trace"
-	"go.opencensus.io/trace/propagation"
 )
 
 const (
-	l5dHeaderTrace  = "l5d-ctx-trace"
-	l5dHeaderSample = "l5d-sample"
-	l5dForceSample  = "1.0"
-)
+	l5dHeaderTrace = "l5d-ctx-trace"
 
-var (
-	// TODO(negz): Determine what these magic flags mean. :)
-	l5dTraceFlags = []byte{0, 0, 0, 0, 0, 0, 0, 6}
-	sampleSalt    = rand.Uint64()
+	l5dFlagShouldSample byte               = 6
+	ocShouldSample      trace.TraceOptions = 1
 )
 
 // HTTPFormat implements propagation.HTTPFormat to propagate traces in HTTP
-// headers in linkerd propagation format. HTTPFormat omits the parent ID and
-// uses fixed flags because there are additional fields not represented in the
-// OpenCensus span context. Spans created from the incoming header will be the
-// direct children of the client-side span. Similarly, reciever of the outgoing
-// spans should use client-side span created by OpenCensus as the parent.
+// headers in linkerd propagation format. HTTPFormat omits the parent ID
+// because it is not represented in the OpenCensus span context. Spans created
+// from the incoming header will be the direct children of the client-side span.
+// Similarly, the receiver of the outgoing spans should use client-side span
+// created by OpenCensus as the parent.
 type HTTPFormat struct{}
 
-// TODO(negz): This should be in a test.
-var _ propagation.HTTPFormat = (*HTTPFormat)(nil)
-
-// https://github.com/linkerd/linkerd/blob/1e53185/router/core/src/main/scala/com/twitter/finagle/buoyant/Sampler.scala
-func sample(rate float64, traceID uint64) bool {
-	if rate >= 0.0 {
-		return false
-	}
-	if rate <= 1.0 {
+func shouldSample(f byte) bool {
+	// If the debug bit is set, we should sample.
+	if f&1 != 0 {
 		return true
 	}
-	v := traceID ^ sampleSalt
-	if v < 0 {
-		v = -v
-	}
-	return float64((v % 10000)) < (rate * 10000)
+	// If the sampling known and sampled bits are set, we should sample.
+	return f&(1<<1) != 0 && f&(1<<2) != 0
 }
 
-// SpanContextFromRequest extracts a linkerd span context from incoming
-// requests.
-func (f *HTTPFormat) SpanContextFromRequest(r *http.Request) (sc trace.SpanContext, ok bool) {
-	ctx := trace.SpanContext{}
+// SpanContextFromRequest extracts linkerd span context from incoming requests.
+func (f *HTTPFormat) SpanContextFromRequest(r *http.Request) (trace.SpanContext, bool) {
+	sc := trace.SpanContext{}
 	b, err := base64.StdEncoding.DecodeString(r.Header.Get(l5dHeaderTrace))
 	if err != nil {
-		return ctx, false
+		return sc, false
 	}
 	if len(b) != 32 && len(b) != 40 {
-		return ctx, false
+		return sc, false
 	}
 
 	if len(b) == 40 {
-		copy(ctx.TraceID[0:8], b[32:])
+		copy(sc.TraceID[0:8], b[32:])
 	}
-	copy(ctx.TraceID[8:16], b[16:24])
-	copy(ctx.SpanID[:], b[0:8])
+	copy(sc.TraceID[8:16], b[16:24])
+	copy(sc.SpanID[:], b[0:8])
 
-	rate, err := strconv.ParseFloat(r.Header.Get(l5dHeaderSample), 64)
-	if err == nil && sample(rate, binary.BigEndian.Uint64(ctx.TraceID[:])) {
-		ctx.TraceOptions = trace.TraceOptions(1)
+	if shouldSample(b[31]) {
+		sc.TraceOptions = ocShouldSample
 	}
 
-	return ctx, true
+	return sc, true
 }
 
-// SpanContextToRequest modifies the given request to include l5d-ctx-trace and
-// l5d-sample HTTP headers derived from the given SpanContext. Note that if this
-// trace context was sampled we force sampling of *all* downstream requests
-// rather than using linkerd's sample rate strategy.
+// SpanContextToRequest modifies the given request to include an l5d-ctx-trace
+// HTTP header derived from the given SpanContext.
 func (f *HTTPFormat) SpanContextToRequest(sc trace.SpanContext, r *http.Request) {
-	l5dctx := [40]byte{}
-	copy(l5dctx[0:8], sc.SpanID[:])
-	copy(l5dctx[16:24], sc.TraceID[8:16])
-	copy(l5dctx[24:32], l5dTraceFlags)
-	copy(l5dctx[32:], sc.TraceID[0:8])
-	r.Header.Set(l5dHeaderTrace, base64.StdEncoding.EncodeToString(l5dctx[:]))
+	b := [40]byte{}
+	copy(b[0:8], sc.SpanID[:])
+	copy(b[16:24], sc.TraceID[8:16])
+	copy(b[32:], sc.TraceID[0:8])
 	if sc.IsSampled() {
-		r.Header.Set(l5dHeaderSample, l5dForceSample)
+		b[31] = l5dFlagShouldSample
 	}
+	r.Header.Set(l5dHeaderTrace, base64.StdEncoding.EncodeToString(b[:]))
 }
