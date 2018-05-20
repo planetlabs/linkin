@@ -1,0 +1,20 @@
+language: go
+
+go:
+  - 1.10.x
+
+jobs:
+  include:
+    - stage: test
+      before_install:
+        - go get -u github.com/alecthomas/gometalinter
+      install:
+        - gometalinter --install
+      script:
+        - go test -race -coverprofile=coverage.txt .
+        - gometalinter --fast --vendor --deadline 5m --disable gotype --disable gas --exclude "\.pb.*\.go" --exclude "_strings\.go" --exclude "_test\.go" --exclude "not checked.+Close" ./...
+      after_success:
+        - bash <(curl -s https://codecov.io/bash)
+
+stages:
+  - name: test
