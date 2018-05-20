@@ -7,8 +7,10 @@ jobs:
   include:
     - stage: test
       before_install:
+        - go get -u github.com/Masterminds/glide
         - go get -u github.com/alecthomas/gometalinter
       install:
+        - glide install
         - gometalinter --install
       script:
         - go test -race -coverprofile=coverage.txt .

@@ -16,8 +16,9 @@ selling points is that it provides Zipkin request tracing 'for free'. Software
 need not be 'fully' instrumented, and instead need only copy linkerd's
 `l5d-ctx-trace` HTTP headers from incoming HTTP requests to any outgoing HTTP
 requests they spawn. Unfortunately while linkerd emits traces to Zipkin, it
-propagates trace data via a non-standard header. This package may be used as a
-drop-in replacement for https://godoc.org/go.opencensus.io/plugin/ochttp/propagation/b3
+propagates trace data along the request path via a non-standard header. This
+package may be used as a drop-in replacement for Opencensus's
+[standard Zipkin propagation](https://godoc.org/go.opencensus.io/plugin/ochttp/propagation/b3)
 in environments that use linkerd for part or all of their request tracing needs.
 
 In addition to propagating linkerd trace context from incoming to outgoing HTTP

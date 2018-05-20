@@ -1,0 +1,11 @@
+hash: 8eb1b129f541ad3a6a99e61bfa2ff580d7a47385487e1681d6e93c0f1e078947
+updated: 2018-05-20T02:41:50.043223-07:00
+imports:
+- name: go.opencensus.io
+  version: 10cec2c05ea2cfb8b0d856711daedc49d8a45c56
+  subpackages:
+  - internal
+  - trace
+  - trace/internal
+  - trace/propagation
+testImports: []

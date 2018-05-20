@@ -1,0 +1,6 @@
+package: github.com/negz/linkin
+import:
+- package: go.opencensus.io
+  version: v0.9.0
+  subpackages:
+  - trace
