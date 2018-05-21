@@ -1,0 +1,19 @@
+package: github.com/negz/linkin/example
+import:
+- package: github.com/negz/linkin
+- package: github.com/openzipkin/zipkin-go
+  version: v0.1.0
+  subpackages:
+  - reporter/http
+- package: go.opencensus.io
+  version: v0.9.0
+  subpackages:
+  - exporter/prometheus
+  - exporter/zipkin
+  - plugin/ochttp
+  - stats/view
+  - trace
+- package: go.uber.org/zap
+  version: v1.8.0
+- package: gopkg.in/alecthomas/kingpin.v2
+  version: v2.2.6

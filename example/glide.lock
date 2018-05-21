@@ -1,0 +1,83 @@
+hash: 492937637b3f3ca2e3a8c6f3f441a923388fbf6e718e58f30025ccea11757cd3
+updated: 2018-05-21T00:32:28.599625-07:00
+imports:
+- name: github.com/alecthomas/template
+  version: a0175ee3bccc567396460bf5acd36800cb10c49c
+  subpackages:
+  - parse
+- name: github.com/alecthomas/units
+  version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
+- name: github.com/beorn7/perks
+  version: 3a771d992973f24aa725d07868b467d1ddfceafb
+  subpackages:
+  - quantile
+- name: github.com/golang/protobuf
+  version: 1643683e1b54a9e88ad26d98f81400c8c9d9f4f9
+  subpackages:
+  - proto
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
+- name: github.com/negz/linkin
+  version: bc42e071e79bc095e6f24e87ad50dccf1cb21913
+- name: github.com/openzipkin/zipkin-go
+  version: f197ec29e729f226d23370ea60f0e49b8f44ccf4
+  subpackages:
+  - idgenerator
+  - model
+  - propagation
+  - reporter
+  - reporter/http
+- name: github.com/prometheus/client_golang
+  version: 967789050ba94deca04a5e84cce8ad472ce313c1
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: 99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 2e54d0b93cba2fd133edc32211dcc32c06ef72ca
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: 8b1c2da0d56deffdbb9e48d4414b4e674bd8083e
+  subpackages:
+  - internal/util
+  - nfs
+  - xfs
+- name: go.opencensus.io
+  version: 10cec2c05ea2cfb8b0d856711daedc49d8a45c56
+  subpackages:
+  - exporter/prometheus
+  - exporter/zipkin
+  - internal
+  - internal/tagencoding
+  - plugin/ochttp
+  - plugin/ochttp/propagation/b3
+  - stats
+  - stats/internal
+  - stats/view
+  - tag
+  - trace
+  - trace/internal
+  - trace/propagation
+- name: go.uber.org/atomic
+  version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
+- name: go.uber.org/multierr
+  version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
+- name: go.uber.org/zap
+  version: eeedf312bc6c57391d84767a4cd413f02a917974
+  subpackages:
+  - buffer
+  - internal/bufferpool
+  - internal/color
+  - internal/exit
+  - zapcore
+- name: gopkg.in/alecthomas/kingpin.v2
+  version: 947dcec5ba9c011838740e680966fd7087a71d0d
+testImports: []
