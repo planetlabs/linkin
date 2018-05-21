@@ -26,7 +26,7 @@ requests via the [ochttp](https://godoc.org/go.opencensus.io/plugin/ochttp)
 library, Opencensus may be used to add spans representing in-application
 method or database calls to a linkerd trace.
 
-## Usage:
+## Usage
 ```go
 // ochttp will automatically inject a span into the context of requests handled
 // by usersHandler. If incoming requests contain a valid l5d-ctx-trace header
