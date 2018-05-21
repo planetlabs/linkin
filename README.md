@@ -25,3 +25,29 @@ In addition to propagating linkerd trace context from incoming to outgoing HTTP
 requests via the [ochttp](https://godoc.org/go.opencensus.io/plugin/ochttp)
 library, Opencensus may be used to add spans representing in-application
 method or database calls to a linkerd trace.
+
+## Usage:
+```go
+// ochttp will automatically inject a span into the context of requests handled
+// by usersHandler. If incoming requests contain a valid l5d-ctx-trace header
+// the injected span will be a child of the calling span.
+http.Handle("/users", usersHandler)
+log.Fatal(http.ListenAndServe("localhost:8080", &ochttp.Handler{Propagation: &linkin.HTTPFormat{}}))
+
+// ochttp will automatically inject a span into the context of outgoing requests
+// sent by the client. Span metadata will be propagated via outgoing requests'
+// l5d-ctx-trace header.
+client := http.Client{Transport: &ochttp.Transport{Propagation: &linkin.HTTPFormat{}}}
+
+// Create a relationship between the incoming and outgoing requests by
+// propagating the incoming request's context to the child. If the incoming
+// request's context contains a span the outgoing request's span will be its
+// child.
+outgoingRequest, _ := http.NewRequest("GET", d, nil)
+outgoingRequest = out.WithContext(incomingRequest.Context())
+rsp, _ := client.Do(out)
+```
+
+A more complete example exists at [example/](example/). The
+[ochttp godoc](https://godoc.org/go.opencensus.io/plugin/ochttp) may also be
+illustrative.
