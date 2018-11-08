@@ -19,7 +19,7 @@ imports:
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
-- name: github.com/negz/linkin
+- name: github.com/planetlabs/linkin
   version: bc42e071e79bc095e6f24e87ad50dccf1cb21913
 - name: github.com/openzipkin/zipkin-go
   version: f197ec29e729f226d23370ea60f0e49b8f44ccf4
