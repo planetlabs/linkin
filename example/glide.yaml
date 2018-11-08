@@ -1,6 +1,6 @@
-package: github.com/negz/linkin/example
+package: github.com/planetlabs/linkin/example
 import:
-- package: github.com/negz/linkin
+- package: github.com/planetlabs/linkin
 - package: github.com/openzipkin/zipkin-go
   version: v0.1.0
   subpackages:
