@@ -1,4 +1,4 @@
-# linkin  [![Godoc](https://img.shields.io/badge/godoc-reference-blue.svg)](https://godoc.org/github.com/planetlabs/linkin) [![Travis](https://img.shields.io/travis/negz/linkin.svg?maxAge=300)](https://travis-ci.org/negz/linkin/) [![Codecov](https://img.shields.io/codecov/c/github/negz/linkin.svg?maxAge=3600)](https://codecov.io/gh/negz/linkin/)
+# linkin  [![Godoc](https://img.shields.io/badge/godoc-reference-blue.svg)](https://godoc.org/github.com/planetlabs/linkin) [![Travis](https://img.shields.io/travis/planetlabs/linkin.svg?maxAge=300)](https://travis-ci.com/planetlabs/linkin/) [![Codecov](https://img.shields.io/codecov/c/github/planetlabs/linkin.svg?maxAge=3600)](https://codecov.io/gh/planetlabs/linkin/)
 Opencensus Trace propagation for linkerd.
 
 [Opencensus](https://opencensus.io/) is a single distribution of libraries that
